@@ -18,6 +18,11 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD!;
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.modify",
+  // gmail.modify's own description says it covers "compose and send", but in
+  // practice the messages.send endpoint enforces gmail.compose/gmail.send
+  // specifically — confirmed by testing send_email live and getting
+  // "Insufficient Permission" with only readonly+modify granted.
+  "https://www.googleapis.com/auth/gmail.compose",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
