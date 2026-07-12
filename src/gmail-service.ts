@@ -167,6 +167,36 @@ export class GmailService {
   }
 
   // -----------------------------------------------------------------------
+  // send_email — gmail.modify already covers compose+send, no extra scope
+  // needed. Subject is RFC 2047 (base64) encoded so accented/UTF-8 subjects
+  // (Spanish tildes, ñ, etc.) render correctly in the recipient's client.
+  // -----------------------------------------------------------------------
+
+  async sendEmail(
+    to: string,
+    subject: string,
+    body: string
+  ): Promise<{ success: boolean; messageId: string }> {
+    const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+    const raw = Buffer.from(
+      [
+        `To: ${to}`,
+        `Subject: ${encodedSubject}`,
+        `Content-Type: text/plain; charset="UTF-8"`,
+        "",
+        body,
+      ].join("\r\n")
+    ).toString("base64url");
+
+    const res = await this.gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw },
+    });
+
+    return { success: true, messageId: res.data.id! };
+  }
+
+  // -----------------------------------------------------------------------
   // apply_label — create if needed, then apply
   // -----------------------------------------------------------------------
 

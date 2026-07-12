@@ -244,6 +244,34 @@ function createMcpServer(): McpServer {
     }
   );
 
+  // ---- send_email ----
+  server.tool(
+    "send_email",
+    "Send a new email from a connected Gmail account.",
+    {
+      account: z.string().describe("Email address of the account to send from"),
+      to: z.string().describe("Recipient email address"),
+      subject: z.string().describe("Email subject line"),
+      body: z.string().describe("Plain text body of the email"),
+    },
+    async ({ account, to, subject, body }) => {
+      const gmail = await getGmailServiceForAccount(account);
+      const result = await gmail.sendEmail(to, subject, body);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              account,
+              ...result,
+              message: `Email sent to ${to}.`,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
   // ---- apply_label ----
   server.tool(
     "apply_label",
