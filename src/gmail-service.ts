@@ -151,6 +151,22 @@ export class GmailService {
   }
 
   // -----------------------------------------------------------------------
+  // delete_email — move to Trash (recoverable for 30 days, same as clicking
+  // the trash icon in Gmail). Uses users.messages.trash, which only needs
+  // the gmail.modify scope already granted — permanent deletion would need
+  // the broader https://mail.google.com/ scope and is intentionally not
+  // exposed here.
+  // -----------------------------------------------------------------------
+
+  async deleteEmail(messageId: string): Promise<{ success: boolean }> {
+    await this.gmail.users.messages.trash({
+      userId: "me",
+      id: messageId,
+    });
+    return { success: true };
+  }
+
+  // -----------------------------------------------------------------------
   // apply_label — create if needed, then apply
   // -----------------------------------------------------------------------
 

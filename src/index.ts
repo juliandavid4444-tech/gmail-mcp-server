@@ -216,6 +216,34 @@ function createMcpServer(): McpServer {
     }
   );
 
+  // ---- delete_email ----
+  server.tool(
+    "delete_email",
+    "Delete an email by moving it to Trash. Recoverable from Trash for 30 days, same as clicking the trash icon in Gmail.",
+    {
+      account: z
+        .string()
+        .describe("Email address of the account this message belongs to"),
+      message_id: z.string().describe("The Gmail message ID to delete"),
+    },
+    async ({ account, message_id }) => {
+      const gmail = await getGmailServiceForAccount(account);
+      const result = await gmail.deleteEmail(message_id);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              account,
+              ...result,
+              message: `Email ${message_id} moved to Trash. Recoverable for 30 days.`,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
   // ---- apply_label ----
   server.tool(
     "apply_label",
