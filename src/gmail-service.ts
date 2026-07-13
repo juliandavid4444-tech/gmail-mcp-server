@@ -151,6 +151,21 @@ export class GmailService {
   }
 
   // -----------------------------------------------------------------------
+  // archive_emails — batch version of archive_email. Runs in parallel and
+  // reports per-message success/failure instead of failing the whole batch
+  // on one bad id.
+  // -----------------------------------------------------------------------
+
+  async archiveEmails(
+    messageIds: string[]
+  ): Promise<{ succeeded: string[]; failed: { id: string; error: string }[] }> {
+    const results = await Promise.allSettled(
+      messageIds.map((id) => this.archiveEmail(id))
+    );
+    return this.summarizeBatch(messageIds, results);
+  }
+
+  // -----------------------------------------------------------------------
   // delete_email — move to Trash (recoverable for 30 days, same as clicking
   // the trash icon in Gmail). Uses users.messages.trash, which only needs
   // the gmail.modify scope already granted — permanent deletion would need
@@ -164,6 +179,38 @@ export class GmailService {
       id: messageId,
     });
     return { success: true };
+  }
+
+  // -----------------------------------------------------------------------
+  // delete_emails — batch version of delete_email. Each id is one Sofi/MCP
+  // "action" but confirming a LIST once is what makes bulk cleanup usable —
+  // confirming 38 individual delete_email calls one by one is not.
+  // -----------------------------------------------------------------------
+
+  async deleteEmails(
+    messageIds: string[]
+  ): Promise<{ succeeded: string[]; failed: { id: string; error: string }[] }> {
+    const results = await Promise.allSettled(
+      messageIds.map((id) => this.deleteEmail(id))
+    );
+    return this.summarizeBatch(messageIds, results);
+  }
+
+  private summarizeBatch(
+    ids: string[],
+    results: PromiseSettledResult<unknown>[]
+  ): { succeeded: string[]; failed: { id: string; error: string }[] } {
+    const succeeded: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        succeeded.push(ids[i]);
+      } else {
+        const reason = r.reason as { message?: string } | undefined;
+        failed.push({ id: ids[i], error: reason?.message ?? String(r.reason) });
+      }
+    });
+    return { succeeded, failed };
   }
 
   // -----------------------------------------------------------------------

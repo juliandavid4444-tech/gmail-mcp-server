@@ -64,7 +64,9 @@ This Gmail MCP server turns any MCP-compatible AI client into a full-featured em
 | `list_emails` | Search and list emails using Gmail query syntax. Supports `account="all"` |
 | `get_email` | Get full email content, headers, and parsed unsubscribe links |
 | `archive_email` | Archive an email by removing it from the inbox |
+| `archive_emails` | Archive multiple emails at once (batch, 1-200 ids, one confirmation) |
 | `delete_email` | Move an email to Trash (recoverable for 30 days) |
+| `delete_emails` | Move multiple emails to Trash at once (batch, 1-200 ids, one confirmation) |
 | `send_email` | Send a new email from a connected account |
 | `apply_label` | Apply a label to an email. Creates the label if it doesn't exist |
 | `unsubscribe_email` | Auto-unsubscribe from mailing lists and newsletters |

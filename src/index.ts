@@ -221,6 +221,39 @@ function createMcpServer(): McpServer {
     }
   );
 
+  // ---- archive_emails (batch) ----
+  server.tool(
+    "archive_emails",
+    "Archive multiple emails at once by removing them from the inbox. Use this instead of calling archive_email repeatedly when cleaning up many emails — it only needs ONE user confirmation for the whole batch instead of one per email.",
+    {
+      account: z
+        .string()
+        .describe("Email address of the account these messages belong to"),
+      message_ids: z
+        .array(z.string())
+        .min(1)
+        .max(200)
+        .describe("The Gmail message IDs to archive (1-200)"),
+    },
+    async ({ account, message_ids }) => {
+      const gmail = await getGmailServiceForAccount(account);
+      const result = await gmail.archiveEmails(message_ids);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              account,
+              archived_count: result.succeeded.length,
+              failed_count: result.failed.length,
+              ...result,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
   // ---- delete_email ----
   server.tool(
     "delete_email",
@@ -242,6 +275,39 @@ function createMcpServer(): McpServer {
               account,
               ...result,
               message: `Email ${message_id} moved to Trash. Recoverable for 30 days.`,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
+  // ---- delete_emails (batch) ----
+  server.tool(
+    "delete_emails",
+    "Delete multiple emails at once by moving them to Trash (recoverable for 30 days). Use this instead of calling delete_email repeatedly when cleaning up many emails (e.g. bulk spam/promotions) — it only needs ONE user confirmation for the whole batch instead of one per email.",
+    {
+      account: z
+        .string()
+        .describe("Email address of the account these messages belong to"),
+      message_ids: z
+        .array(z.string())
+        .min(1)
+        .max(200)
+        .describe("The Gmail message IDs to delete (1-200)"),
+    },
+    async ({ account, message_ids }) => {
+      const gmail = await getGmailServiceForAccount(account);
+      const result = await gmail.deleteEmails(message_ids);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              account,
+              deleted_count: result.succeeded.length,
+              failed_count: result.failed.length,
+              ...result,
             }),
           },
         ],
