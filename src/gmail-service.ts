@@ -151,18 +151,15 @@ export class GmailService {
   }
 
   // -----------------------------------------------------------------------
-  // archive_emails — batch version of archive_email. Runs in parallel and
-  // reports per-message success/failure instead of failing the whole batch
-  // on one bad id.
+  // archive_emails — batch version of archive_email. Uses the native
+  // users.messages.batchModify endpoint (1 API call for up to 1000 ids —
+  // Gmail's own documented limit — instead of N individual calls). Faster
+  // and avoids per-user rate limits that N parallel calls could trip.
   // -----------------------------------------------------------------------
 
-  async archiveEmails(
-    messageIds: string[]
-  ): Promise<{ succeeded: string[]; failed: { id: string; error: string }[] }> {
-    const results = await Promise.allSettled(
-      messageIds.map((id) => this.archiveEmail(id))
-    );
-    return this.summarizeBatch(messageIds, results);
+  async archiveEmails(messageIds: string[]): Promise<{ archived_count: number }> {
+    await this.batchModifyChunked(messageIds, { removeLabelIds: ["INBOX"] });
+    return { archived_count: messageIds.length };
   }
 
   // -----------------------------------------------------------------------
@@ -182,35 +179,36 @@ export class GmailService {
   }
 
   // -----------------------------------------------------------------------
-  // delete_emails — batch version of delete_email. Each id is one Sofi/MCP
-  // "action" but confirming a LIST once is what makes bulk cleanup usable —
-  // confirming 38 individual delete_email calls one by one is not.
+  // delete_emails — batch version of delete_email. Trash isn't its own
+  // batchModify label op, but it's exactly what messages.trash() does under
+  // the hood: add TRASH, remove INBOX. Using batchModify for this handles up
+  // to 1000 ids in ONE API call (Gmail's documented max) instead of N
+  // individual trash() calls — the confirmation-per-batch design is what
+  // makes bulk cleanup (e.g. "delete these 38 spam emails") usable in Sofi.
   // -----------------------------------------------------------------------
 
-  async deleteEmails(
-    messageIds: string[]
-  ): Promise<{ succeeded: string[]; failed: { id: string; error: string }[] }> {
-    const results = await Promise.allSettled(
-      messageIds.map((id) => this.deleteEmail(id))
-    );
-    return this.summarizeBatch(messageIds, results);
+  async deleteEmails(messageIds: string[]): Promise<{ deleted_count: number }> {
+    await this.batchModifyChunked(messageIds, {
+      addLabelIds: ["TRASH"],
+      removeLabelIds: ["INBOX"],
+    });
+    return { deleted_count: messageIds.length };
   }
 
-  private summarizeBatch(
-    ids: string[],
-    results: PromiseSettledResult<unknown>[]
-  ): { succeeded: string[]; failed: { id: string; error: string }[] } {
-    const succeeded: string[] = [];
-    const failed: { id: string; error: string }[] = [];
-    results.forEach((r, i) => {
-      if (r.status === "fulfilled") {
-        succeeded.push(ids[i]);
-      } else {
-        const reason = r.reason as { message?: string } | undefined;
-        failed.push({ id: ids[i], error: reason?.message ?? String(r.reason) });
-      }
-    });
-    return { succeeded, failed };
+  // Gmail's batchModify caps at 1000 ids/request; chunk defensively in case
+  // a caller ever passes more than the tool schema's max allows.
+  private async batchModifyChunked(
+    messageIds: string[],
+    labels: { addLabelIds?: string[]; removeLabelIds?: string[] }
+  ): Promise<void> {
+    const CHUNK_SIZE = 1000;
+    for (let i = 0; i < messageIds.length; i += CHUNK_SIZE) {
+      const chunk = messageIds.slice(i, i + CHUNK_SIZE);
+      await this.gmail.users.messages.batchModify({
+        userId: "me",
+        requestBody: { ids: chunk, ...labels },
+      });
+    }
   }
 
   // -----------------------------------------------------------------------

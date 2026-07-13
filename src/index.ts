@@ -137,9 +137,9 @@ function createMcpServer(): McpServer {
       max_results: z
         .number()
         .min(1)
-        .max(100)
+        .max(500)
         .default(20)
-        .describe("Maximum number of emails to return per account (1-100)"),
+        .describe("Maximum number of emails to return per account (1-500, Gmail API's own max)"),
     },
     async ({ account, query, max_results }) => {
       const accounts = resolveAccounts(account);
@@ -232,8 +232,8 @@ function createMcpServer(): McpServer {
       message_ids: z
         .array(z.string())
         .min(1)
-        .max(200)
-        .describe("The Gmail message IDs to archive (1-200)"),
+        .max(1000)
+        .describe("The Gmail message IDs to archive (1-1000, Gmail API's own batch max)"),
     },
     async ({ account, message_ids }) => {
       const gmail = await getGmailServiceForAccount(account);
@@ -244,9 +244,8 @@ function createMcpServer(): McpServer {
             type: "text" as const,
             text: JSON.stringify({
               account,
-              archived_count: result.succeeded.length,
-              failed_count: result.failed.length,
               ...result,
+              message: `${result.archived_count} email(s) archived.`,
             }),
           },
         ],
@@ -293,8 +292,8 @@ function createMcpServer(): McpServer {
       message_ids: z
         .array(z.string())
         .min(1)
-        .max(200)
-        .describe("The Gmail message IDs to delete (1-200)"),
+        .max(1000)
+        .describe("The Gmail message IDs to delete (1-1000, Gmail API's own batch max)"),
     },
     async ({ account, message_ids }) => {
       const gmail = await getGmailServiceForAccount(account);
@@ -305,9 +304,8 @@ function createMcpServer(): McpServer {
             type: "text" as const,
             text: JSON.stringify({
               account,
-              deleted_count: result.succeeded.length,
-              failed_count: result.failed.length,
               ...result,
+              message: `${result.deleted_count} email(s) moved to Trash. Recoverable for 30 days.`,
             }),
           },
         ],
@@ -420,9 +418,9 @@ function createMcpServer(): McpServer {
       max_results: z
         .number()
         .min(1)
-        .max(100)
+        .max(500)
         .default(20)
-        .describe("Maximum number of emails to fetch per account"),
+        .describe("Maximum number of emails to fetch per account (1-500, Gmail API's own max)"),
     },
     async ({ account, query, max_results }) => {
       const accounts = resolveAccounts(account);
