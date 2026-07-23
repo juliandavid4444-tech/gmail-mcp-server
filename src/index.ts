@@ -65,6 +65,31 @@ async function getGmailServiceForAccount(email: string): Promise<GmailService> {
   return new GmailService(token);
 }
 
+// Turns a raw Gmail/OAuth failure into something a caller (or an LLM relaying
+// it to a human) can act on. "invalid_grant" on its own is unreadable and was
+// previously swallowed entirely, which surfaced as "no emails found".
+function describeAccountError(err: any, email: string): string {
+  const raw = String(err?.message ?? err);
+
+  if (raw.includes("invalid_grant")) {
+    return (
+      `Authorization for "${email}" is no longer valid (invalid_grant). ` +
+      `The stored refresh token was revoked or expired — reconnect the account at ${SERVER_URL}/setup. ` +
+      `Note: while the OAuth app's publishing status is "Testing", Google expires refresh tokens after 7 days; ` +
+      `publish the app to production to stop this from recurring.`
+    );
+  }
+
+  if (raw.includes("insufficient") || raw.includes("Insufficient Permission")) {
+    return (
+      `Missing permissions for "${email}" (insufficient scope). ` +
+      `Re-authorize at ${SERVER_URL}/setup so a token with the required Gmail scopes is issued.`
+    );
+  }
+
+  return `${email}: ${raw}`;
+}
+
 function resolveAccounts(account: string): string[] {
   if (account.toLowerCase() === "all") {
     const all = tokenStore.listAccounts().map((a) => a.email);
@@ -143,7 +168,12 @@ function createMcpServer(): McpServer {
     },
     async ({ account, query, max_results }) => {
       const accounts = resolveAccounts(account);
-      const allResults: Array<{ account: string; emails: any[] }> = [];
+      const allResults: Array<{
+        account: string;
+        emails: any[];
+        error?: string;
+      }> = [];
+      let failures = 0;
 
       for (const email of accounts) {
         try {
@@ -151,9 +181,12 @@ function createMcpServer(): McpServer {
           const emails = await gmail.listEmails(query, max_results);
           allResults.push({ account: email, emails });
         } catch (err: any) {
+          failures++;
+          console.error(`[list_emails] ${email} failed:`, err?.message ?? err);
           allResults.push({
             account: email,
             emails: [],
+            error: describeAccountError(err, email),
           });
         }
       }
@@ -165,6 +198,9 @@ function createMcpServer(): McpServer {
             text: JSON.stringify(allResults, null, 2),
           },
         ],
+        // Only a total failure is an error: with account='all', one dead
+        // account shouldn't discard the results of the healthy ones.
+        ...(failures === accounts.length ? { isError: true } : {}),
       };
     }
   );
@@ -424,7 +460,12 @@ function createMcpServer(): McpServer {
     },
     async ({ account, query, max_results }) => {
       const accounts = resolveAccounts(account);
-      const allResults: Array<{ account: string; emails: any[] }> = [];
+      const allResults: Array<{
+        account: string;
+        emails: any[];
+        error?: string;
+      }> = [];
+      let failures = 0;
 
       for (const email of accounts) {
         try {
@@ -432,7 +473,13 @@ function createMcpServer(): McpServer {
           const emails = await gmail.batchProcess(query, max_results);
           allResults.push({ account: email, emails });
         } catch (err: any) {
-          allResults.push({ account: email, emails: [] });
+          failures++;
+          console.error(`[batch_process] ${email} failed:`, err?.message ?? err);
+          allResults.push({
+            account: email,
+            emails: [],
+            error: describeAccountError(err, email),
+          });
         }
       }
 
@@ -452,6 +499,7 @@ function createMcpServer(): McpServer {
             ),
           },
         ],
+        ...(failures === accounts.length ? { isError: true } : {}),
       };
     }
   );
